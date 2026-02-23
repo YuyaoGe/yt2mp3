@@ -7,7 +7,9 @@
 # --- 可修改参数 ---
 CHANNEL_URL="https://www.youtube.com/@ChannelName"   # YouTube 频道地址
 OUTPUT_FILE="channel_urls.txt"                        # 输出文件名
-COOKIES_FILE="cookies.txt"                            # Netscape 格式 cookies 文件
+COOKIES_FROM_BROWSER="safari"                            # 从浏览器读取 cookies (safari/chrome/firefox/edge/brave/opera/chromium)
+                                                         # 留空则使用 COOKIES_FILE
+COOKIES_FILE="cookies.txt"                               # Netscape 格式 cookies 文件 (仅在 COOKIES_FROM_BROWSER 为空时使用)
 MAX_COUNT="0"                                         # 最多提取视频数 (0 = 全部)
 PROXY=""                                              # 代理地址，留空则不使用 (例: socks5://127.0.0.1:1080)
 # ------------------
@@ -16,7 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PYTHON="${SCRIPT_DIR}/venv/bin/python3.12"
 SCRIPT="${SCRIPT_DIR}/get_channel_urls.py"
 
-if [ ! -f "${SCRIPT_DIR}/${COOKIES_FILE}" ]; then
+if [ -z "${COOKIES_FROM_BROWSER}" ] && [ ! -f "${SCRIPT_DIR}/${COOKIES_FILE}" ]; then
     echo "Error: ${COOKIES_FILE} not found"
     exit 1
 fi
@@ -26,7 +28,11 @@ echo "  YouTube Channel URL Extractor"
 echo "========================================"
 echo "  Channel:   ${CHANNEL_URL}"
 echo "  Output:    ${OUTPUT_FILE}"
-echo "  Cookies:   ${COOKIES_FILE}"
+if [ -n "${COOKIES_FROM_BROWSER}" ]; then
+    echo "  Cookies:   ${COOKIES_FROM_BROWSER} browser"
+else
+    echo "  Cookies:   ${COOKIES_FILE}"
+fi
 [ "${MAX_COUNT}" != "0" ] && echo "  Max count: ${MAX_COUNT}"
 [ -n "${PROXY}" ]         && echo "  Proxy:     ${PROXY}"
 echo "========================================"
@@ -35,7 +41,11 @@ echo ""
 # 构建参数
 ARGS=("${CHANNEL_URL}")
 ARGS+=(-o "${SCRIPT_DIR}/${OUTPUT_FILE}")
-ARGS+=(-c "${SCRIPT_DIR}/${COOKIES_FILE}")
+if [ -n "${COOKIES_FROM_BROWSER}" ]; then
+    ARGS+=(-b "${COOKIES_FROM_BROWSER}")
+else
+    ARGS+=(-c "${SCRIPT_DIR}/${COOKIES_FILE}")
+fi
 
 [ "${MAX_COUNT}" != "0" ] && ARGS+=(-n "${MAX_COUNT}")
 [ -n "${PROXY}" ]         && ARGS+=(--proxy "${PROXY}")

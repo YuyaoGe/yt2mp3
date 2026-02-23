@@ -10,11 +10,12 @@ os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ.get("PATH", "")
 import yt_dlp
 
 
-def get_channel_videos(channel_url, cookies_file, proxy=None, max_count=0):
+def get_channel_videos(channel_url, cookies_file=None, browser=None, proxy=None, max_count=0):
     ydl_opts = {
         "extract_flat": True,
         "quiet": True,
-        "cookiefile": cookies_file,
+        "cookiefile": None if browser else cookies_file,
+        "cookiesfrombrowser": (browser,) if browser else None,
         "remote_components": ["ejs:github"],
     }
 
@@ -53,6 +54,9 @@ examples:
                         help="output file for URLs (default: channel_urls.txt)")
     parser.add_argument("-c", "--cookies", default="cookies.txt",
                         help="Netscape format cookies file (default: cookies.txt)")
+    parser.add_argument("-b", "--browser", default=None,
+                        choices=["safari", "chrome", "firefox", "edge", "brave", "opera", "chromium"],
+                        help="read cookies directly from browser (e.g. safari). Overrides --cookies")
     parser.add_argument("-n", "--max-count", type=int, default=0,
                         help="max number of videos to extract (default: 0 = all)")
     parser.add_argument("--proxy", default=None,
@@ -60,15 +64,16 @@ examples:
 
     args = parser.parse_args()
 
-    if not os.path.isfile(args.cookies):
+    if not args.browser and not os.path.isfile(args.cookies):
         print(f"Error: cookies file not found: {args.cookies}")
         sys.exit(1)
 
     print(f"Extracting video URLs from: {args.channel}")
+    print(f"  Cookies:   {args.browser + ' browser' if args.browser else args.cookies}")
     if args.max_count > 0:
         print(f"  Max videos: {args.max_count}")
 
-    urls = get_channel_videos(args.channel, args.cookies, args.proxy, args.max_count)
+    urls = get_channel_videos(args.channel, args.cookies, args.browser, args.proxy, args.max_count)
 
     if not urls:
         print("No videos found.")

@@ -6,7 +6,9 @@
 
 # --- 可修改参数 ---
 INPUT_FILE="input.txt"          # 包含 YouTube 链接的文件
-COOKIES_FILE="cookies.txt"      # Netscape 格式 cookies 文件
+COOKIES_FROM_BROWSER="safari"    # 从浏览器读取 cookies (safari/chrome/firefox/edge/brave/opera/chromium)
+                                 # 留空则使用 COOKIES_FILE
+COOKIES_FILE="cookies.txt"      # Netscape 格式 cookies 文件 (仅在 COOKIES_FROM_BROWSER 为空时使用)
 OUTPUT_DIR="output"             # MP3 输出目录
 QUALITY="128"                   # 音频比特率 (64, 96, 128, 192, 256, 320)
 FORMAT="mp3"                    # 音频格式 (mp3, m4a, opus, flac, wav)
@@ -17,6 +19,7 @@ EMBED_LYRICS="yes"              # 是否嵌入歌词/字幕 (yes/no)
 SUBS_LANG="zh-Hans,zh,en"      # 字幕语言偏好，逗号分隔 (优先取前面的语言)
 USE_ARCHIVE="yes"               # 是否启用下载记录，跳过已下载 (yes/no)
 PROXY=""                        # 代理地址，留空则不使用 (例: socks5://127.0.0.1:1080)
+THREADS="3"                     # 并发下载线程数 (1 = 单线程)
 LIMIT_RATE=""                   # 下载限速 bytes/s，留空则不限速 (例: 1000000 = ~1MB/s)
 # ------------------
 
@@ -29,7 +32,7 @@ if [ ! -f "${SCRIPT_DIR}/${INPUT_FILE}" ]; then
     exit 1
 fi
 
-if [ ! -f "${SCRIPT_DIR}/${COOKIES_FILE}" ]; then
+if [ -z "${COOKIES_FROM_BROWSER}" ] && [ ! -f "${SCRIPT_DIR}/${COOKIES_FILE}" ]; then
     echo "Error: ${COOKIES_FILE} not found"
     exit 1
 fi
@@ -39,12 +42,17 @@ echo "========================================"
 echo "  YouTube -> Audio Downloader"
 echo "========================================"
 echo "  Input:     ${INPUT_FILE} (${URL_COUNT} URLs)"
-echo "  Cookies:   ${COOKIES_FILE}"
+if [ -n "${COOKIES_FROM_BROWSER}" ]; then
+    echo "  Cookies:   ${COOKIES_FROM_BROWSER} browser"
+else
+    echo "  Cookies:   ${COOKIES_FILE}"
+fi
 echo "  Output:    ${OUTPUT_DIR}/"
 echo "  Quality:   ${FORMAT} @ ${QUALITY}kbps"
 echo "  Metadata:  ${EMBED_METADATA}"
 echo "  Thumbnail: ${EMBED_THUMBNAIL}"
 echo "  Lyrics:    ${EMBED_LYRICS} (${SUBS_LANG})"
+echo "  Threads:   ${THREADS}"
 echo "  Archive:   ${USE_ARCHIVE}"
 [ -n "${PROXY}" ]      && echo "  Proxy:     ${PROXY}"
 [ -n "${LIMIT_RATE}" ] && echo "  Rate limit: ${LIMIT_RATE} bytes/s"
@@ -53,11 +61,16 @@ echo ""
 
 # 构建参数
 ARGS=("${SCRIPT_DIR}/${INPUT_FILE}")
-ARGS+=(-c "${SCRIPT_DIR}/${COOKIES_FILE}")
+if [ -n "${COOKIES_FROM_BROWSER}" ]; then
+    ARGS+=(-b "${COOKIES_FROM_BROWSER}")
+else
+    ARGS+=(-c "${SCRIPT_DIR}/${COOKIES_FILE}")
+fi
 ARGS+=(-o "${SCRIPT_DIR}/${OUTPUT_DIR}")
 ARGS+=(-q "${QUALITY}")
 ARGS+=(-f "${FORMAT}")
 ARGS+=(--naming "${NAMING}")
+ARGS+=(-t "${THREADS}")
 
 [ "${EMBED_METADATA}" = "no" ]  && ARGS+=(--no-metadata)
 [ "${EMBED_THUMBNAIL}" = "no" ] && ARGS+=(--no-thumbnail)

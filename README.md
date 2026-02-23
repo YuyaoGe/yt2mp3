@@ -1,114 +1,146 @@
 # yt2mp3
 
-YouTube 视频批量下载并转换为 MP3 的命令行工具，支持元数据嵌入（标题、作者、封面）。
+[中文版](README_zh.md)
 
-## 功能
+A command-line tool for batch downloading YouTube videos as MP3 with full metadata embedding.
 
-- 批量下载 YouTube 视频并转为 MP3（或 m4a/opus/flac/wav）
-- 自动嵌入元数据（标题、作者、专辑、封面图）
-- 提取 YouTube 频道的全部视频链接
-- 为已有 MP3 文件补充元数据
-- 支持自定义音质、命名模板、代理等参数
-- 断点续传：跳过已下载的文件
+## Features
 
-## 依赖
+- Batch download YouTube videos as MP3 (or m4a/opus/flac/wav)
+- Multi-threaded concurrent downloads (default: 3 threads)
+- Auto-embed metadata: title, artist, album, year, cover art, synchronized lyrics (LRC)
+- Read cookies directly from browser (Safari, Chrome, Firefox, etc.) — no manual export needed
+- Extract all video URLs from a YouTube channel
+- Configurable quality, naming template, proxy, rate limit, and more
+- Download archive: skip already-downloaded files
+
+## Requirements
 
 - Python 3.12+
 - [ffmpeg](https://ffmpeg.org/)
-- [deno](https://deno.land/)（yt-dlp JS challenge 求解需要）
-- YouTube cookies（Netscape 格式，可用 [Cookie-Editor](https://cookie-editor.com/) 浏览器扩展导出）
+- [deno](https://deno.land/) (required by yt-dlp for YouTube JS challenge solving)
+- YouTube login session in your browser (or a Netscape-format cookies file)
 
-## 安装
+## Installation
 
 ```bash
-# 克隆项目
+# Clone
 git clone https://github.com/YuyaoGe/yt2mp3.git
 cd yt2mp3
 
-# 创建虚拟环境并安装依赖
+# Create virtual environment and install dependencies
 python3.12 -m venv venv
 source venv/bin/activate
 pip install yt-dlp mutagen
 
-# 安装系统依赖 (macOS)
+# Install system dependencies (macOS)
 brew install ffmpeg deno
 ```
 
-## 使用方法
+## Usage
 
-### 1. 下载 YouTube 视频为 MP3
+### 1. Download YouTube Videos as MP3
 
-准备一个 `input.txt`，每行一个 YouTube URL（`#` 开头为注释）：
+Create an `input.txt` file with one YouTube URL per line (`#` for comments):
 
 ```
-# 我的播放列表
+# My playlist
 https://www.youtube.com/watch?v=xxxxx
 https://www.youtube.com/watch?v=yyyyy
 ```
 
-将 cookies 导出为 Netscape 格式，保存为 `cookies.txt`，然后运行：
+Run the shell script (reads cookies from Safari by default):
 
 ```bash
 bash run_download.sh
 ```
 
-或直接调用 Python 脚本：
+Or call the Python script directly:
 
 ```bash
-python3 yt2mp3.py input.txt -c cookies.txt -o output -q 128
+# Using browser cookies (recommended)
+python3 yt2mp3.py input.txt -b safari
+
+# Using cookies file
+python3 yt2mp3.py input.txt -c cookies.txt
 ```
 
-完整参数列表：
+#### Full Options
 
 ```
-python3 yt2mp3.py --help
+usage: yt2mp3.py [-h] [-c COOKIES] [-b BROWSER] [-o OUTPUT] [-q QUALITY]
+                 [-f FORMAT] [-t THREADS] [--naming NAMING] [--no-metadata]
+                 [--no-thumbnail] [--no-lyrics] [--subs-lang SUBS_LANG]
+                 [--no-archive] [--proxy PROXY] [--limit-rate BYTES]
+                 urls
 
-  -c, --cookies       cookies 文件 (默认: cookies.txt)
-  -o, --output        输出目录 (默认: output)
-  -q, --quality       音频比特率 kbps (64/96/128/192/256/320, 默认: 128)
-  -f, --format        音频格式 (mp3/m4a/opus/flac/wav, 默认: mp3)
-  --naming            文件命名模板 (默认: "%(title)s")
-  --no-metadata       不嵌入元数据
-  --no-thumbnail      不嵌入封面图
-  --no-archive        禁用下载记录（重新下载全部）
-  --proxy             代理地址 (例: socks5://127.0.0.1:1080)
-  --limit-rate        下载限速 bytes/s
+  urls                  text file with YouTube URLs (one per line)
+  -c, --cookies         Netscape format cookies file (default: cookies.txt)
+  -b, --browser         read cookies from browser: safari, chrome, firefox,
+                        edge, brave, opera, chromium. Overrides --cookies
+  -o, --output          output directory (default: output)
+  -q, --quality         audio bitrate in kbps: 64/96/128/192/256/320 (default: 128)
+  -f, --format          audio format: mp3/m4a/opus/flac/wav (default: mp3)
+  -t, --threads         concurrent download threads (default: 3)
+  --naming              filename template (default: "%(title)s")
+                        Available: %(title)s, %(channel)s, %(id)s, %(upload_date)s
+  --no-metadata         skip embedding metadata (title, artist, album, year)
+  --no-thumbnail        skip embedding cover art
+  --no-lyrics           skip downloading and embedding lyrics/subtitles
+  --subs-lang           subtitle language preference, comma-separated
+                        (default: "zh-Hans,zh,en")
+  --no-archive          disable download archive (re-download everything)
+  --proxy               proxy URL (e.g. socks5://127.0.0.1:1080)
+  --limit-rate          max download rate in bytes/sec
 ```
 
-### 2. 提取频道全部视频链接
+### 2. Extract Channel Video URLs
 
 ```bash
-# 修改 run_get_urls.sh 中的 CHANNEL_URL 后运行
+# Edit CHANNEL_URL in run_get_urls.sh, then:
 bash run_get_urls.sh
 
-# 或直接调用
-python3 get_channel_urls.py https://www.youtube.com/@ChannelName -o urls.txt
+# Or call directly:
+python3 get_channel_urls.py https://www.youtube.com/@ChannelName -b safari -o urls.txt
 ```
 
-## Shell 脚本配置
+## Shell Script Configuration
 
-`run_download.sh` 和 `run_get_urls.sh` 顶部均有可修改参数区域，直接编辑即可：
+Both `run_download.sh` and `run_get_urls.sh` have a configuration section at the top. Edit the variables directly:
 
 ```bash
-# run_download.sh 可配置参数
-INPUT_FILE="input.txt"
-COOKIES_FILE="cookies.txt"
+# run_download.sh
+COOKIES_FROM_BROWSER="safari"    # Read cookies from browser (leave empty to use file)
+COOKIES_FILE="cookies.txt"      # Fallback cookies file
 OUTPUT_DIR="output"
 QUALITY="128"
 FORMAT="mp3"
 NAMING="%(title)s"
 EMBED_METADATA="yes"
 EMBED_THUMBNAIL="yes"
+EMBED_LYRICS="yes"
+SUBS_LANG="zh-Hans,zh,en"
 USE_ARCHIVE="yes"
+THREADS="3"
 PROXY=""
 LIMIT_RATE=""
 ```
 
-## 注意事项
+## How It Works
 
-- YouTube 会在自动化访问期间轮换 cookies，长时间运行可能需要重新导出 cookies
-- 使用 `--no-archive` 可以强制重新下载所有文件
-- cookies 文件包含隐私信息，请勿提交到版本控制
+1. **Download**: yt-dlp downloads the best audio stream from YouTube
+2. **Convert**: FFmpeg extracts/converts audio to the target format and bitrate
+3. **Metadata**: FFmpegMetadata writes basic tags; `MetadataFallbackPP` fills any gaps (title, artist, album from channel name, year)
+4. **Cover art**: yt-dlp's EmbedThumbnail embeds the thumbnail; `ThumbnailFallbackPP` retries via direct URL download if needed
+5. **Lyrics**: YouTube subtitles are downloaded, parsed into synchronized LRC format, and embedded as USLT ID3 tags
+6. **Archive**: Each completed download is recorded in `.archive.txt` (thread-safe) to skip on future runs
+
+## Notes
+
+- The first run on macOS may prompt for Keychain access when reading browser cookies — allow it
+- Use `--no-archive` to force re-downloading all files
+- Cookies files contain private data — never commit them to version control
+- The download archive is per-output-directory (`.archive.txt` inside the output folder)
 
 ## License
 
