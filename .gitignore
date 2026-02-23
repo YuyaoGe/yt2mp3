@@ -1,0 +1,26 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Cookies & credentials
+cookies.txt
+cookies.json
+
+# Downloaded files
+output/
+test/
+
+# URL lists (user-specific)
+input.txt
+test_url.txt
+channel_*.txt
+
+# Internal tools
+add_metadata.py
+
+# macOS
+.DS_Store
+
+# Claude Code
+.claude/
