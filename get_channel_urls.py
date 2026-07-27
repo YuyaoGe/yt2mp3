@@ -1,4 +1,4 @@
-#!/Users/moonshot/项目/youtube/venv/bin/python3.12
+#!/usr/bin/env python3
 """Extract all video URLs from a YouTube channel and write to a text file."""
 
 import argparse

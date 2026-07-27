@@ -1,4 +1,4 @@
-#!/Users/moonshot/项目/youtube/venv/bin/python3.12
+#!/usr/bin/env python3
 """YouTube to MP3 downloader with embedded metadata (title, artist, cover art, lyrics)."""
 
 import argparse

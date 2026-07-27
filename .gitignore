@@ -7,14 +7,33 @@ __pycache__/
 cookies.txt
 cookies.json
 
-# Downloaded files
+# Downloaded and processed audio (never commit media)
 output/
+output*/
 test/
+*.mp3
+*.m4a
+*.opus
+*.flac
+*.wav
+*.lrc
+*.vtt
+*.srt
+*.webp
+*.part
 
 # URL lists (user-specific)
 input.txt
 test_url.txt
 channel_*.txt
+
+# Logs and scratch files
+*.log
+.transcribe.log
+.urls*
+.bench*/
+.single.txt
+.test_one.txt
 
 # Internal tools
 add_metadata.py
