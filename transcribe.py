@@ -182,7 +182,13 @@ def transcribe_one(task):
     audio_len = MP3(filepath).info.length
     t0 = time.time()
 
+    import mlx.core as mx
     import mlx_whisper
+
+    # Left alone, MLX keeps every buffer it has ever allocated. Over hundreds of
+    # files that cache grows into tens of gigabytes of wired memory per worker and
+    # drives the machine into swap, so cap it and hand the buffers back each time.
+    mx.set_cache_limit(opts["cache_limit"])
 
     try:
         result = mlx_whisper.transcribe(
@@ -194,6 +200,8 @@ def transcribe_one(task):
         )
     except Exception as e:
         return {"name": name, "ok": False, "msg": f"Error: {e}"}
+    finally:
+        mx.clear_cache()
 
     lyrics = segments_to_lrc(result.get("segments", []), make_converter(opts["zh_variant"]))
     if not lyrics:
@@ -247,6 +255,9 @@ examples:
     parser.add_argument("-t", "--threads", type=int, default=3,
                         help="concurrent worker processes (default: 3). Each holds its own "
                              "copy of the model, roughly 3GB of memory per worker")
+    parser.add_argument("--cache-limit", type=int, default=512,
+                        help="MLX buffer cache ceiling per worker in MB (default: 512). "
+                             "Keeps long runs from filling memory with cached buffers")
 
     args = parser.parse_args()
 
@@ -256,6 +267,10 @@ examples:
 
     if os.path.isdir(args.target):
         files = sorted(glob.glob(os.path.join(args.target, "*.mp3")))
+        if not files:
+            # A library split into one folder per album
+            files = sorted(glob.glob(os.path.join(args.target, "**", "*.mp3"),
+                                     recursive=True))
     elif os.path.isfile(args.target):
         files = [args.target]
     else:
@@ -301,6 +316,7 @@ examples:
         "prompt": args.prompt,
         "zh_variant": args.zh_variant,
         "save_lrc": args.save_lrc,
+        "cache_limit": args.cache_limit * 1024 * 1024,
     }
 
     # Longest files first, so the tail of the run is not one straggler

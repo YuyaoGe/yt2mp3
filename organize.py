@@ -12,23 +12,33 @@ from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, ID3NoHeaderError, TIT2, TPE1, TALB, TRCK, TDRC, TCON, APIC
 
 SEP = "[丨｜|]"
-# The date in the "wj-MMDD" prefix is the publish date; it orders the series
-PREFIX = re.compile(rf"^wj-(?P<date>\d+){SEP}?\s*", re.IGNORECASE)
-LETTER = re.compile(rf"^(?:第(?P<num>\d+)封信){SEP}?\s*")
-QA = re.compile(rf"^(?:周末问答|答读者问)\s*(?P<num>\d+){SEP}?\s*")
-BONUS = re.compile(rf"^(?P<kind>发刊词|特别加餐|加餐|复习和书单){SEP}?\s*")
-# A few files carry a redundant section number, e.g. "wj-0924丨000丨发刊词｜..."
-SECTION = re.compile(rf"^\d{{3}}{SEP}\s*")
+# Publish date, written either as "wj-MMDD" or "YY.MMDD" depending on the series
+PREFIX = re.compile(rf"^(?:wj-\s*(?P<md>\d+)|(?P<yy>\d{{2}})\.(?P<md2>\d{{4}})){SEP}?\s*",
+                    re.IGNORECASE)
+LETTER = re.compile(rf"^(?:第(?P<num>\d+)封信)\s*{SEP}?\s*")
+# Side strands of a series, some numbered, some one-offs. Longer names first so
+# "问答加餐3" is not read as a plain "问答".
+KINDS = ["周末问答", "答读者问", "问答加餐", "周五专题", "特别加餐", "春节加餐",
+         "徕卡摄影课", "复习和书单", "元旦彩蛋", "新课邀请", "周末加议", "特别来信",
+         "新春特辑",
+         "发刊词", "加餐", "彩蛋", "复盘", "解读", "问答"]
+SHORTEN = {"周末问答": "问答", "答读者问": "问答", "周五专题": "专题"}
+KIND = re.compile(rf"^(?P<kind>{'|'.join(KINDS)})\s*(?P<num>\d*)\s*{SEP}?\s*")
+# Several series number episodes plainly, e.g. "wj-0103丨40丨标题"
+PLAIN = re.compile(rf"^(?P<num>\d{{1,3}})\s*{SEP}\s*")
+# "wj-0924丨000丨发刊词｜..." repeats a section number before the real label
+SECTION = re.compile(rf"^0{{2,3}}{SEP}\s*")
 
 
 def parse(stem):
-    """Split a source filename into (sort_date, label, title)."""
+    """Split a source filename into (year, date, label, title)."""
     rest = stem
-    date = ""
+    year = date = ""
 
-    m = PREFIX.match(rest)
-    if m:
-        date = m.group("date")
+    # A handful of files stamp the date twice, as "wj-0817丨23.0817丨..."
+    while (m := PREFIX.match(rest)):
+        date = m.group("md") or m.group("md2")
+        year = m.group("yy") or year
         rest = rest[m.end():]
 
     rest = SECTION.sub("", rest)
@@ -36,25 +46,27 @@ def parse(stem):
     # "第001封信·元旦彩蛋丨..." keeps the letter number, the aside goes in the title
     m = LETTER.match(rest)
     if m:
-        return date, m.group("num").zfill(3), rest[m.end():].lstrip("·丨｜| ")
+        return year, date, m.group("num").zfill(3), rest[m.end():].lstrip("·丨｜| ")
 
-    m = QA.match(rest)
+    m = KIND.match(rest)
     if m:
-        return date, f"问答{m.group('num').zfill(2)}", rest[m.end():]
+        kind = SHORTEN.get(m.group("kind"), m.group("kind"))
+        num = m.group("num")
+        return year, date, kind + (num.zfill(2) if num else ""), rest[m.end():]
 
-    m = BONUS.match(rest)
+    m = PLAIN.match(rest)
     if m:
-        return date, m.group("kind"), rest[m.end():]
+        return year, date, m.group("num").zfill(2), rest[m.end():]
 
     # The handbook numbers its own chapters as "wj-01丨标题"
     if date and len(date) <= 2:
-        return date, date.zfill(2), rest
+        return year, date, date.zfill(2), rest
 
-    return date, "", rest
+    return year, date, "", rest
 
 
 def clean_title(title):
-    title = title.strip().strip("·丨｜| ")
+    title = title.strip().strip("·丨｜|：: ")
     return re.sub(r"\s+", " ", title)
 
 
@@ -66,9 +78,11 @@ def new_name(label, title):
 def collect(source, skip_dirs=()):
     """Gather files in listening order.
 
-    Filenames carry only MM-DD, so a plain date sort would put January ahead of
-    the previous October. The folders make the year explicit: month folders run
-    chronologically by name and the loose files at the top are the final stretch.
+    Some series date their files as YY.MMDD, which sorts on its own. The rest
+    carry only MM-DD, so a plain date sort would put January ahead of the
+    previous October; there the folders make the year explicit, with month
+    folders running chronologically by name and the loose files at the top
+    forming the final stretch.
     """
     entries = []
     for root, dirs, files in os.walk(source):
@@ -79,9 +93,9 @@ def collect(source, skip_dirs=()):
         for name in sorted(files):
             if not name.lower().endswith(".mp3"):
                 continue
-            date, label, title = parse(os.path.splitext(name)[0])
+            year, date, label, title = parse(os.path.splitext(name)[0])
             # A whole batch can share the launch date; the opener still comes first
-            key = (rank, date.zfill(4) if date else "9999",
+            key = (rank, year, date.zfill(4) if date else "9999",
                    "0" if label == "发刊词" else "1", label, name)
             entries.append((key, date, label, title, os.path.join(root, name)))
 
@@ -94,6 +108,8 @@ def write_tags(path, title, artist, album, track, total, year, cover):
         audio = MP3(path, ID3=ID3)
     except ID3NoHeaderError:
         audio = MP3(path)
+    # A few files arrive with no tag block at all
+    if audio.tags is None:
         audio.add_tags()
 
     # The source files carry a reseller's ad in the artist, album and cover art

@@ -81,12 +81,28 @@ the tag block is rebuilt from scratch, so that goes away. Run with `--dry-run`
 first to check the names, then drop the flag to copy the files. Sources are never
 modified.
 
-`make_cover.py` draws a plain typographic cover to embed, for when the audio has
-no artwork of its own:
+`make_cover.py` draws a typographic cover to embed, for when the audio has no
+artwork of its own. Give it a title, an author and three colours; the caption
+and hair rules are mixed from those, so a set of albums can share one layout
+and still be told apart:
 
 ```bash
-python3 make_cover.py "Some Course/Season 2" -s "Author" -o cover.jpg
+python3 make_cover.py "Some Course/Season 2" -s "Author" \
+    --caption "a course in something" -o cover.jpg \
+    -c "#f4efe2" --ink "#23201c" --accent "#a63f2c"
 ```
+
+The same resellers who plant adverts in the tags also read one aloud at the top
+and tail of each recording, which then lands in the transcript. `strip_ads.py`
+drops those lines from the embedded lyrics:
+
+```bash
+python3 strip_ads.py "podcast/Some Course" --dry-run
+```
+
+It matches phone numbers and a few stock phrases, and follows an advert onto the
+short line it usually spills onto. Check the report with `--dry-run` before
+letting it save.
 
 ## Requirements
 
@@ -124,7 +140,8 @@ yt2mp3/
 ├── transcribe.py         # Whisper transcription -> LRC -> ID3 embedding
 ├── compress.py           # Step 4: re-encode smaller, keeping all tags
 ├── organize.py           # Bonus: tidy a folder of audio into a podcast library
-├── make_cover.py         # Bonus: draw a plain cover for audio without artwork
+├── make_cover.py         # Bonus: draw a cover for audio without artwork
+├── strip_ads.py          # Bonus: drop spoken adverts from embedded lyrics
 ├── input.txt             # Your URL list (one per line, # for comments)
 ├── output/               # Downloaded MP3 files land here
 └── output_small/         # Compressed copies land here

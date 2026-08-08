@@ -78,11 +78,25 @@ python3 organize.py "~/Downloads/某某课程" -o "podcast/某某课程" \
 和封面图里——而标签块是整个重建的，广告随之消失。建议先加 `--dry-run` 确认命名，
 再去掉这个参数正式复制。原文件全程只读，不会改动。
 
-`make_cover.py` 用来生成一张简洁的文字封面，供本来就没有配图的音频使用：
+`make_cover.py` 用来生成一张文字封面，供本来就没有配图的音频使用。给它标题、
+作者和三个颜色即可，英文小字和细线的颜色由这三色混合得出，因此一整套专辑可以
+共用同一版式而彼此又能分辨：
 
 ```bash
-python3 make_cover.py "某某课程/第二季" -s "作者" -o cover.jpg
+python3 make_cover.py "某某课程/第二季" -s "作者" \
+    --caption "a course in something" -o cover.jpg \
+    -c "#f4efe2" --ink "#23201c" --accent "#a63f2c"
 ```
+
+在标签里塞广告的转卖者，往往也会在每集的头尾念一段口播，转写后就混进了歌词。
+`strip_ads.py` 负责把这些行删掉：
+
+```bash
+python3 strip_ads.py "podcast/某某课程" --dry-run
+```
+
+它匹配电话号码和几句固定话术，并会顺带删掉广告常常溢出到的那半句短行。建议先用
+`--dry-run` 看一遍报告，确认无误再正式写入。
 
 ## 依赖
 
@@ -121,6 +135,7 @@ yt2mp3/
 ├── compress.py           # 第四步：压缩体积，保留全部标签
 ├── organize.py           # 附加：把一堆音频整理成播客资料库
 ├── make_cover.py         # 附加：给没有配图的音频生成文字封面
+├── strip_ads.py          # 附加：删掉歌词里被念出来的口播广告
 ├── input.txt             # 你的链接列表（每行一个，# 为注释）
 ├── output/               # 下载的 MP3 文件存放在这里
 └── output_small/         # 压缩后的副本存放在这里
