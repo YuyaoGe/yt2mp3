@@ -7,3 +7,6 @@ mlx-whisper>=0.4.3
 
 # Simplified/Traditional Chinese conversion (step 3, optional)
 opencc-python-reimplemented>=0.1.7
+
+# Cover art generation (make_cover.py, optional)
+pillow>=12.3.0

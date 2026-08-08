@@ -63,6 +63,31 @@ python3 compress.py output/
 
 Output lands in `output_small/`; the originals are left untouched. Tags are copied over with mutagen afterwards — ffmpeg alone would silently drop the lyrics frame — and every file is verified before the script reports success.
 
+## Bonus: cleaning up audio you already have
+
+The transcription and tagging steps do not care where the audio came from. If you
+have a folder of downloaded lecture or course files, `organize.py` flattens it into
+a library that reads well in a player:
+
+```bash
+python3 organize.py "~/Downloads/Some Course" -o "podcast/Some Course" \
+    -a "Some Course" --artist "Author" --dry-run
+```
+
+It derives an episode number and title from each filename, orders episodes by
+their folder and date, and writes clean title/artist/album/track tags. Resold
+course files often arrive with a shop's advert in the artist, album and cover art;
+the tag block is rebuilt from scratch, so that goes away. Run with `--dry-run`
+first to check the names, then drop the flag to copy the files. Sources are never
+modified.
+
+`make_cover.py` draws a plain typographic cover to embed, for when the audio has
+no artwork of its own:
+
+```bash
+python3 make_cover.py "Some Course/Season 2" -s "Author" -o cover.jpg
+```
+
 ## Requirements
 
 - Python 3.12+
@@ -98,6 +123,8 @@ yt2mp3/
 ├── run_transcribe.sh     # Step 3: transcribe missing lyrics (edit config & run)
 ├── transcribe.py         # Whisper transcription -> LRC -> ID3 embedding
 ├── compress.py           # Step 4: re-encode smaller, keeping all tags
+├── organize.py           # Bonus: tidy a folder of audio into a podcast library
+├── make_cover.py         # Bonus: draw a plain cover for audio without artwork
 ├── input.txt             # Your URL list (one per line, # for comments)
 ├── output/               # Downloaded MP3 files land here
 └── output_small/         # Compressed copies land here

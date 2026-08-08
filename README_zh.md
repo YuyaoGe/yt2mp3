@@ -63,6 +63,27 @@ python3 compress.py output/
 
 结果输出到 `output_small/`，原文件不动。转码后会用 mutagen 把标签整块搬过去 —— 单靠 ffmpeg 会静默丢掉歌词帧 —— 并在报告成功前逐个校验。
 
+## 附：整理手头已有的音频
+
+转写和打标签这两步并不关心音频从哪来。如果你手上有一整个文件夹的课程或讲座音频，
+`organize.py` 可以把它整理成在播放器里一眼看得懂的资料库：
+
+```bash
+python3 organize.py "~/Downloads/某某课程" -o "podcast/某某课程" \
+    -a "某某课程" --artist "作者" --dry-run
+```
+
+它会从文件名里解析出集数和标题，按所在目录和日期排出收听顺序，并写入干净的
+标题/作者/专辑/音轨号。二手转卖的课程音频常常被塞进店家的广告——藏在作者、专辑
+和封面图里——而标签块是整个重建的，广告随之消失。建议先加 `--dry-run` 确认命名，
+再去掉这个参数正式复制。原文件全程只读，不会改动。
+
+`make_cover.py` 用来生成一张简洁的文字封面，供本来就没有配图的音频使用：
+
+```bash
+python3 make_cover.py "某某课程/第二季" -s "作者" -o cover.jpg
+```
+
 ## 依赖
 
 - Python 3.12+
@@ -98,6 +119,8 @@ yt2mp3/
 ├── run_transcribe.sh     # 第三步：转写补齐歌词（编辑配置后运行）
 ├── transcribe.py         # Whisper 转写 -> LRC -> 写入 ID3
 ├── compress.py           # 第四步：压缩体积，保留全部标签
+├── organize.py           # 附加：把一堆音频整理成播客资料库
+├── make_cover.py         # 附加：给没有配图的音频生成文字封面
 ├── input.txt             # 你的链接列表（每行一个，# 为注释）
 ├── output/               # 下载的 MP3 文件存放在这里
 └── output_small/         # 压缩后的副本存放在这里

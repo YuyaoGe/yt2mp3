@@ -5,6 +5,7 @@ import argparse
 import glob
 import multiprocessing
 import os
+import re
 import signal
 import sys
 import time
@@ -42,6 +43,20 @@ SPLIT_AFTER = "。！？；!?;…"
 SPLIT_SOFT = "，、,"
 MAX_CHARS = 28
 MIN_CHARS = 8
+
+CJK = r"\u4e00-\u9fff\u3000-\u303f\uff00-\uffef"
+# Whisper sometimes writes 什么 with the rare variant 幺, which OpenCC leaves alone
+VARIANTS = [(re.compile("([什怎这那多要甚])[幺麽]"), lambda m: m.group(1) + "么")]
+# It also punctuates Chinese with ASCII marks; only the ones following a
+# Chinese character are safe to widen, so "1,000" and "3.5" survive
+HALFWIDTH = {",": "，", "?": "？", "!": "！", ";": "；", ":": "："}
+PUNCT = re.compile(f"(?<=[{CJK}])([,?!;:])")
+
+
+def polish(text):
+    for pattern, repl in VARIANTS:
+        text = pattern.sub(repl, text)
+    return PUNCT.sub(lambda m: HALFWIDTH[m.group(1)], text)
 
 
 def split_text(text):
@@ -82,6 +97,7 @@ def segments_to_lrc(segments, converter=None):
         prev_text = text
         if converter:
             text = converter.convert(text)
+        text = polish(text)
 
         start, end = seg["start"], seg.get("end", seg["start"])
         chunks = split_text(text)
@@ -135,9 +151,9 @@ def convert_existing(filepath, converter):
     for line in lines:
         ts, sep, text = line.partition("]")
         if sep and ts.startswith("["):
-            converted.append(f"{ts}]{converter.convert(text)}")
+            converted.append(f"{ts}]{polish(converter.convert(text))}")
         else:
-            converted.append(converter.convert(line))
+            converted.append(polish(converter.convert(line)))
 
     embed_lyrics(filepath, "\n".join(converted), frames[0].lang)
     return len(converted)

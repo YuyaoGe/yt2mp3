@@ -10,6 +10,8 @@ cookies.json
 # Downloaded and processed audio (never commit media)
 output/
 output*/
+podcast/
+covers/
 test/
 *.mp3
 *.m4a
