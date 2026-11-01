@@ -15,6 +15,8 @@ PROXY=""                                              # 代理地址，留空则
 # ------------------
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Personal overrides (not committed): local/run_get_urls.conf, same variable names as above
+[ -f "${SCRIPT_DIR}/local/run_get_urls.conf" ] && . "${SCRIPT_DIR}/local/run_get_urls.conf"
 PYTHON="${SCRIPT_DIR}/venv/bin/python3.12"
 SCRIPT="${SCRIPT_DIR}/get_channel_urls.py"
 

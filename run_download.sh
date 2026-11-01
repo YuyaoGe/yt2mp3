@@ -21,9 +21,12 @@ USE_ARCHIVE="yes"               # 是否启用下载记录，跳过已下载 (ye
 PROXY=""                        # 代理地址，留空则不使用 (例: socks5://127.0.0.1:1080)
 THREADS="3"                     # 并发下载线程数 (1 = 单线程)
 LIMIT_RATE=""                   # 下载限速 bytes/s，留空则不限速 (例: 1000000 = ~1MB/s)
+SLEEP=""                        # 每集下载前随机等待 SLEEP~2×SLEEP 秒，防止被 YouTube 判定为机器人 (例: 15)
 # ------------------
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Personal overrides (not committed): local/run_download.conf, same variable names as above
+[ -f "${SCRIPT_DIR}/local/run_download.conf" ] && . "${SCRIPT_DIR}/local/run_download.conf"
 PYTHON="${SCRIPT_DIR}/venv/bin/python3.12"
 SCRIPT="${SCRIPT_DIR}/yt2mp3.py"
 
@@ -79,5 +82,6 @@ ARGS+=(-t "${THREADS}")
 [ "${USE_ARCHIVE}" = "no" ]     && ARGS+=(--no-archive)
 [ -n "${PROXY}" ]               && ARGS+=(--proxy "${PROXY}")
 [ -n "${LIMIT_RATE}" ]          && ARGS+=(--limit-rate "${LIMIT_RATE}")
+[ -n "${SLEEP}" ]               && ARGS+=(--sleep "${SLEEP}")
 
 "${PYTHON}" "${SCRIPT}" "${ARGS[@]}"

@@ -21,6 +21,8 @@ THREADS="3"                     # 并发进程数 (1 = 单进程)
 # ------------------
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Personal overrides (not committed): local/run_transcribe.conf, same variable names as above
+[ -f "${SCRIPT_DIR}/local/run_transcribe.conf" ] && . "${SCRIPT_DIR}/local/run_transcribe.conf"
 PYTHON="${SCRIPT_DIR}/venv/bin/python3.12"
 SCRIPT="${SCRIPT_DIR}/transcribe.py"
 

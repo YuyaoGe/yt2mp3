@@ -13,6 +13,38 @@ Batch download an entire YouTube channel as MP3 files — with cover art, metada
 - **Fast & resumable** — Multi-threaded downloads (3 threads by default); built-in archive skips already-downloaded files across runs
 - **Robust fallbacks** — If yt-dlp's built-in metadata or thumbnail embedding fails, custom fallback processors retry automatically
 - **Shrink for upload** — Re-encode to a smaller bitrate while preserving every ID3 frame, lyrics and cover art included
+- **Clean, not just converted** — Drops Whisper's filler lines, trims silent or musical tails, and finds jingles that repeat across episodes so you can listen and cut them
+
+## The Pipeline
+
+```
+URLs ─> download ─> transcribe ─> clean ─> trim ─> review ─> (apply) ─> compress ─> export
+        yt2mp3.py   transcribe.py strip_ads trim_tail find_repeats.py    compress.py export_transcripts.py
+```
+
+`run_pipeline.sh` runs it end to end. Set the options at the top of the script, put your URLs in `input.txt`, then:
+
+```bash
+bash run_pipeline.sh                 # download -> transcribe -> clean -> trim -> review
+open review_output/index.html        # listen to the repeated / silent parts it found
+bash run_pipeline.sh apply R01,S03   # cut the ones you don't want
+bash run_pipeline.sh finish          # compress, and export transcripts if EXPORT_DIR is set
+```
+
+Any single step can be run on its own: `bash run_pipeline.sh transcribe`, `... trim`, and so on. Each step only touches what it needs to: already-downloaded videos and already-transcribed files are skipped, and every destructive step keeps a copy of the original in `_untrimmed_backup/`.
+
+| Step | What it does |
+|---|---|
+| download | One MP3 per video, with title, artist, album, year, cover art and subtitles as synced lyrics |
+| transcribe | Whisper (Apple Silicon, MLX) for every file still without lyrics |
+| clean | Removes lines Whisper invents over music or silence (stock subtitle credits, a word looped twenty times) and spoken adverts |
+| trim | Cuts trailing silence and the outro music after the last spoken sentence; lossless, tags and lyrics kept |
+| review | Fingerprints every episode, finds audio that recurs across episodes (intro/outro jingles, inserted promos) plus silent heads, tails and gaps, and writes a page of short samples to listen to |
+| apply | Cuts the items you chose from every episode they occur in, anywhere in the file, shifting the lyric timestamps to match |
+| compress | 64 kbps mono copies, all tags preserved |
+| export | Optional: one Markdown transcript per episode plus an index, paragraphs with `[mm:ss]` stamps |
+
+The step-by-step guide below covers the same tools one at a time.
 
 ## Quick Start
 
@@ -102,7 +134,47 @@ python3 strip_ads.py "podcast/Some Course" --dry-run
 
 It matches phone numbers and a few stock phrases, and follows an advert onto the
 short line it usually spills onto. Check the report with `--dry-run` before
-letting it save.
+letting it save. It also removes Whisper's hallucinated filler by default
+(`--keep-hallucinations` turns that off).
+
+## More tools
+
+**Trim silent or musical tails** — `trim_tail.py` cuts each file at the earlier of
+(a) a silence that runs to the end, or (b) just after the last real sentence when
+only music follows. Cuts are lossless (`-c copy`), tags and cover are kept, and
+lyric lines past the cut are dropped:
+
+```bash
+python3 trim_tail.py output/ --dry-run
+python3 trim_tail.py output/ --also output_small --backup _untrimmed_backup
+```
+
+**Find and remove repeated audio** — `find_repeats.py` fingerprints every file and
+cross-correlates every pair, so an intro jingle, a sign-off song or a promo spot
+inserted mid-episode is found even when each copy was mixed slightly differently.
+It also lists silent heads, tails and long gaps. Nothing is changed until you pick:
+
+```bash
+python3 find_repeats.py output/ review/              # writes review/index.html with samples
+python3 find_repeats.py output/ review/ --apply R01,S02 --backup _untrimmed_backup
+```
+
+**Lyrics from burned-in subtitles** — when a video's audio is silent but the
+subtitles are drawn into the picture, `burnin_subs.py` reads them with macOS
+Vision OCR (via `ocr_frames.swift`, no extra install) and embeds them as synced
+lyrics:
+
+```bash
+python3 burnin_subs.py video.mp4 "output/that episode.mp3" --dry-run
+```
+
+**Export transcripts** — `export_transcripts.py` turns the embedded lyrics of a
+folder into one Markdown file per episode (merged into paragraphs, `[mm:ss]` at
+each) plus an `index.md`, for reading or for feeding to other tools:
+
+```bash
+python3 export_transcripts.py output/ transcripts/ --course "My Archive"
+```
 
 ## Requirements
 
@@ -132,28 +204,35 @@ Transcription downloads the Whisper weights on first use (~1.6 GB for the defaul
 
 ```
 yt2mp3/
+├── run_pipeline.sh       # The whole pipeline in one script (edit config & run)
 ├── run_get_urls.sh       # Step 1: extract channel video URLs (edit config & run)
 ├── get_channel_urls.py   # URL extraction logic
 ├── run_download.sh       # Step 2: batch download as MP3 (edit config & run)
 ├── yt2mp3.py             # Download & conversion logic
 ├── run_transcribe.sh     # Step 3: transcribe missing lyrics (edit config & run)
 ├── transcribe.py         # Whisper transcription -> LRC -> ID3 embedding
+├── strip_ads.py          # Drop Whisper filler and spoken adverts from lyrics
+├── trim_tail.py          # Cut silent / musical tails
+├── find_repeats.py       # Find repeated jingles & silence, review, then cut
 ├── compress.py           # Step 4: re-encode smaller, keeping all tags
+├── export_transcripts.py # Lyrics -> Markdown transcripts + index
+├── burnin_subs.py        # Lyrics from subtitles burned into the video (OCR)
+├── ocr_frames.swift      # macOS Vision OCR helper for burnin_subs.py
 ├── organize.py           # Bonus: tidy a folder of audio into a podcast library
 ├── make_cover.py         # Bonus: draw a cover for audio without artwork
-├── strip_ads.py          # Bonus: drop spoken adverts from embedded lyrics
+├── local/                # Your own settings (*.conf), git-ignored
 ├── input.txt             # Your URL list (one per line, # for comments)
 ├── output/               # Downloaded MP3 files land here
 └── output_small/         # Compressed copies land here
 ```
 
-**Typical workflow:** `run_get_urls.sh` -> `input.txt` -> `run_download.sh` -> `run_transcribe.sh` -> `compress.py`
+**Typical workflow:** `run_get_urls.sh` -> `input.txt` -> `run_pipeline.sh` -> listen -> `run_pipeline.sh apply ...` -> `run_pipeline.sh finish`
 
 You only need to edit the shell scripts and run them. The `.py` files handle everything under the hood.
 
 ## Configuration
 
-Both shell scripts have a clearly-marked configuration section at the top. Open them in any text editor and adjust as needed.
+Every shell script has a clearly-marked configuration section at the top. To keep your own values out of git, put them in `local/<script name>.conf` instead (for example `local/run_pipeline.conf` containing `COOKIES_FROM_BROWSER="edge"`); the script reads it after its defaults, and `local/` is git-ignored.
 
 ### run_get_urls.sh
 
@@ -184,6 +263,7 @@ USE_ARCHIVE="yes"              # Skip already-downloaded files
 THREADS="3"                    # Concurrent download threads
 PROXY=""                       # Proxy URL
 LIMIT_RATE=""                  # Download rate limit (bytes/s)
+SLEEP=""                       # Random pause (SLEEP to 2x SLEEP s) before each video
 ```
 
 ### run_transcribe.sh
@@ -225,6 +305,11 @@ python3 transcribe.py output/ --zh-variant simp --convert-only
 # Compress
 python3 compress.py output/ -b 64
 python3 compress.py output/ -b 96 --stereo -o output_hq/
+
+# Clean, trim, review
+python3 strip_ads.py output/ --dry-run
+python3 trim_tail.py output/ --dry-run
+python3 find_repeats.py output/ review/ && python3 find_repeats.py output/ review/ --apply R01
 ```
 
 Every script has a `--help` describing its full option set.
@@ -248,7 +333,9 @@ Lyrics live in the ID3 `USLT` frame as LRC text, so a single `.mp3` carries ever
 
 - On macOS, the first run may prompt for Keychain access to read browser cookies — allow it
 - Safari's cookie store is protected by macOS privacy controls, so a sandboxed terminal may not be able to read it. Export a `cookies.txt` instead and leave `COOKIES_FROM_BROWSER` empty
-- YouTube rotates session cookies when it sees many parallel requests from one account. If downloads start failing with "Sign in to confirm you're not a bot", export fresh cookies and lower `THREADS`
+- YouTube rotates session cookies when it sees many parallel requests from one account. An exported `cookies.txt` is a frozen copy and goes stale after a few dozen videos ("Sign in to confirm you're not a bot"); reading cookies straight from the browser (`-b edge`, `-b chrome`, …) stays fresh because the browser keeps renewing the session
+- Some videos offer no audio-only stream. The downloader then takes format 18 (a single 360p file with AAC audio) instead of hundreds of HLS fragments
+- If your environment refuses to delete many files in one go, pass `--keep-intermediate` to `yt2mp3.py` and clear the leftover video/thumbnail files yourself
 - Use `--no-archive` or set `USE_ARCHIVE="no"` to force re-downloading everything
 - The download archive (`.archive.txt`) is stored inside the output directory
 - Cookies files contain private data — never commit them to version control

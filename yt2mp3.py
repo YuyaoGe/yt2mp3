@@ -259,11 +259,17 @@ def _make_ydl_opts(args):
         postprocessors.append({"key": "FFmpegMetadata"})
 
     if args.thumbnail:
-        postprocessors.append({"key": "EmbedThumbnail"})
+        # keep_intermediate: leave the thumbnail file instead of deleting it
+        postprocessors.append({"key": "EmbedThumbnail",
+                               "already_have_thumbnail": args.keep_intermediate})
 
     opts = {
+        "keepvideo": args.keep_intermediate,
         "ffmpeg_location": "/opt/homebrew/bin",
-        "format": "bestaudio/best",
+        # Some videos expose no audio-only stream, only muxed HLS (91-96). Plain
+        # "best" would then pull 480p-1080p video in hundreds of fragments.
+        # Format 18 is a single progressive 360p mp4 with AAC audio: small, one file.
+        "format": "bestaudio/18/best",
         "cookiefile": None if args.browser else args.cookies,
         "cookiesfrombrowser": (args.browser,) if args.browser else None,
         "remote_components": ["ejs:github"],
@@ -285,6 +291,12 @@ def _make_ydl_opts(args):
 
     if args.limit_rate:
         opts["ratelimit"] = args.limit_rate
+
+    if args.sleep:
+        # Random pause before each video; long runs on one account trip YouTube's bot check
+        opts["sleep_interval"] = args.sleep
+        opts["max_sleep_interval"] = args.sleep * 2
+        opts["sleep_interval_requests"] = 1
 
     # Suppress progress bars when multi-threaded (they'd interleave)
     if args.threads > 1:
@@ -429,6 +441,12 @@ examples:
                         help="disable download archive (re-download everything)")
     parser.add_argument("--proxy", default=None,
                         help="proxy URL (e.g. socks5://127.0.0.1:1080)")
+    parser.add_argument("--keep-intermediate", action="store_true",
+                        help="do not delete the downloaded video/thumbnail after converting "
+                             "(for sandboxes that block bulk deletes; clean them up yourself)")
+    parser.add_argument("--sleep", type=float, default=0, metavar="SECONDS",
+                        help="wait SECONDS to 2x SECONDS (random) before each video, to avoid "
+                             "YouTube's \"not a bot\" block on long runs; use with -t 1")
     parser.add_argument("--limit-rate", type=int, default=None, metavar="BYTES",
                         help="max download rate in bytes/sec (e.g. 1000000 for ~1MB/s)")
 

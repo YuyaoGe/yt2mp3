@@ -45,3 +45,11 @@ add_metadata.py
 
 # Claude Code
 .claude/
+
+# Personal settings, notes and working folders (never commit)
+local/
+playlist_*.txt
+review*/
+_untrimmed_backup/
+_archived_skills/
+.workbuddy/

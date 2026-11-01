@@ -59,6 +59,40 @@ def polish(text):
     return PUNCT.sub(lambda m: HALFWIDTH[m.group(1)], text)
 
 
+# Over music, laughter or silence Whisper falls back on stock phrases from the
+# fan-subtitled videos it was trained on, or loops one token ("度度度…") until
+# the 30-second window runs out. Neither is speech.
+BOILERPLATE = re.compile(r"明镜\s*(与|and)|请不吝点赞|点赞\s*订阅|字幕由.{0,12}提供|Amara\.org"
+                         r"|优优独播剧场|YoYo Television|字幕志愿者|MING PAO|明镜需要您的支持"
+                         r"|^词曲\s|^中文字幕\s*[—-]")
+LOOP = re.compile(r"([^\d\s]{1,3}?)\1{4,}")  # digits excluded so "1000000" is safe
+# The same loop at word level: "priorit priorit priorit …"
+WORD_LOOP = re.compile(r"(?<![A-Za-z])([A-Za-z]{2,15})(?:[\s，,]+\1(?![A-Za-z])){4,}")
+# A whole line that is one short phrase said five or more times ("这个总统这个总统…",
+# "有情绪，有情绪，…"): Whisper stuck on a token. Two or three repeats ("没有没有",
+# "对啊对啊对啊") are ordinary replies in live recordings and are kept.
+WHOLE_LOOP = re.compile(r"([^\d\s，,。！？…]{2,4}?)[，,。！？…\s]*(?:\1[，,。！？…\s]*){4,}")
+
+
+def scrub(text):
+    """Strip Whisper filler from a line; return "" if nothing that was said is left.
+
+    A loop is collapsed rather than the line dropped, because it often hangs off
+    real speech: "也也也也也也讲过嘛" -> "也讲过嘛". Whatever is too short to carry
+    meaning after collapsing ("度度度…" -> "度") goes.
+    """
+    if BOILERPLATE.search(text) or "\ufffd" in text:
+        return ""
+    if WHOLE_LOOP.fullmatch(text):
+        return ""
+    if not (LOOP.search(text) or WORD_LOOP.search(text)):
+        return text
+    text = WORD_LOOP.sub("", LOOP.sub(r"\1", text))
+    # Dropping a word loop can leave a dangling comma behind
+    text = re.sub(r"^[\s，,]+|[\s，,]+$", "", text)
+    return text if len(text) > 3 else ""
+
+
 def split_text(text):
     """Break a long line at punctuation into chunks small enough to read at a glance."""
     if len(text) <= MAX_CHARS:
@@ -98,6 +132,10 @@ def segments_to_lrc(segments, converter=None):
         if converter:
             text = converter.convert(text)
         text = polish(text)
+        # Scrub the whole segment before splitting, so a loop is seen intact
+        text = scrub(text)
+        if not text:
+            continue
 
         start, end = seg["start"], seg.get("end", seg["start"])
         chunks = split_text(text)
@@ -135,8 +173,12 @@ def make_converter(variant):
         return None
     import opencc
 
-    # The "p" variants also swap region-specific wording, not just glyphs
-    return opencc.OpenCC("s2twp" if variant == "trad" else "tw2sp")
+    # To Traditional, "s2twp" also swaps in Taiwan wording, which is what a
+    # Taiwan reader expects. The reverse is not safe: Whisper's Chinese output
+    # is mostly Simplified already, and "tw2sp" then treats ordinary mainland
+    # words as Taiwan ones (核心 -> 内核, 什么 -> 什幺, 抬 -> 擡). Plain "t2s"
+    # only maps characters, so text that is already Simplified passes through.
+    return opencc.OpenCC("s2twp" if variant == "trad" else "t2s")
 
 
 def convert_existing(filepath, converter):
