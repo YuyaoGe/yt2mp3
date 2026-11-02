@@ -126,6 +126,28 @@ def cut(src, a, b, dst):
                     "-i", src, "-ac", "1", "-b:a", "96k", dst], check=True)
 
 
+def decoded_length(path):
+    """Duration by decoding every frame; header-based lengths can be wrong after a copy-concat."""
+    err = subprocess.run([FFMPEG, "-i", path, "-map", "0:a", "-f", "null", "-"],
+                         capture_output=True, text=True).stderr
+    t = re.findall(r"time=(\d+):(\d+):([\d.]+)", err)
+    return int(t[-1][0]) * 3600 + int(t[-1][1]) * 60 + float(t[-1][2]) if t else 0.0
+
+
+def relocate(ref, h, s, e):
+    """Best place for fingerprint `ref` inside h[s..e] (seconds).
+    Returns (start_seconds, agreement 0..1) or None if the stretch is too short."""
+    seg = h[int(s * FPS):int(e * FPS)]
+    L = len(ref)
+    if L == 0 or len(seg) < L:
+        return None
+    n = 1 << int(np.ceil(np.log2(len(seg) + L)))
+    c = np.fft.irfft((np.fft.rfft(seg, n=n, axis=0) * np.conj(np.fft.rfft(ref, n=n, axis=0))).sum(1), n=n)
+    c = c[:len(seg) - L + 1]
+    k = int(np.argmax(c))
+    return s + k / FPS, float(c[k] / (np.abs(ref).sum() + 1e-9))
+
+
 def mmss(s):
     s = int(round(s))
     return f"{s // 60}:{s % 60:02d}"
@@ -181,6 +203,12 @@ def remove_spans(path, spans, backup=None):
         out = os.path.join(work, "out.mp3")
         subprocess.run([FFMPEG, "-y", "-v", "error", "-fflags", "+genpts", "-f", "concat", "-safe", "0", "-i", listing,
                         "-c", "copy", out], check=True)
+        # Never replace the episode unless the result is exactly as long as intended
+        want = sum(b - a for a, b in keep)
+        got = decoded_length(out)
+        if abs(got - want) > 1.0:
+            raise RuntimeError(f"{os.path.basename(path)}: expected {want:.1f}s after cutting, "
+                               f"got {got:.1f}s; left unchanged")
 
         frames = tags.getall("USLT")
         if frames:
@@ -213,15 +241,29 @@ def apply_report(review, ids, also, backup):
     if missing:
         sys.exit(f"Not in report: {', '.join(sorted(missing))}")
     per_file = collections.defaultdict(list)
+    oversized = []
     for r in chosen:
+        # The sample the user listened to is r["seconds"] long; refuse to cut
+        # anything much longer than that under the same id
+        limit = max(2 * r["seconds"], r["seconds"] + 10)
         for o in r["occurrences"]:
+            if o["end"] - o["start"] > limit:
+                oversized.append(f"{r['id']} {o['file'][:40]} {mmss(o['start'])}-{mmss(o['end'])}")
             per_file[o["path"]].append((o["start"], o["end"]))
+    if oversized:
+        sys.exit("Refusing to cut: these spans are far longer than the sample you heard:\n  "
+                 + "\n  ".join(oversized))
     total = 0.0
+    failed = []
     for path, spans in sorted(per_file.items()):
         if not os.path.exists(path):
             print(f"  missing {path}")
             continue
-        gone = remove_spans(path, spans, backup)
+        try:
+            gone = remove_spans(path, spans, backup)
+        except (RuntimeError, subprocess.CalledProcessError) as exc:
+            failed.append(str(exc))
+            continue
         for d in also:
             twin = os.path.join(d, os.path.basename(path))
             if os.path.exists(twin):
@@ -231,7 +273,10 @@ def apply_report(review, ids, also, backup):
         total += gone
     print(f"\nremoved {total / 60:.1f} min from {len(per_file)} file(s). "
           f"Run find_repeats.py again before applying more: timings have shifted.")
-    os.remove(os.path.join(review, "report.json"))
+    for msg in failed:
+        print(f"  FAILED {msg}")
+    # Kept for the record, but renamed so it cannot be applied twice
+    os.replace(os.path.join(review, "report.json"), os.path.join(review, "report.applied.json"))
 
 
 def main():
@@ -336,6 +381,22 @@ def main():
                 span[f] = (min(span[f][0], s), max(span[f][1], e))
             else:
                 span[f] = (s, e)
+        if len(span) < args.min_files:
+            continue
+        # A shared music bed under the speech can make two whole episodes look
+        # alike, so a span may run on for minutes past the jingle. Re-find the
+        # typical clip inside any span that is much longer than the rest.
+        lens = sorted(e - s for s, e in span.values())
+        med = lens[len(lens) // 2]
+        ref_f, (ref_s, ref_e) = min(span.items(), key=lambda kv: abs((kv[1][1] - kv[1][0]) - med))
+        for f, (s, e) in list(span.items()):
+            if e - s <= max(1.5 * med, med + 5):
+                continue
+            hit = relocate(H[ref_f][int(ref_s * FPS):int(ref_e * FPS)], H[f], s, e)
+            if hit is None or hit[1] < 0.3:
+                del span[f]
+            else:
+                span[f] = (hit[0], hit[0] + (ref_e - ref_s))
         if len(span) < args.min_files:
             continue
         occ = []
